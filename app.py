@@ -2,11 +2,21 @@ from flask import Flask, request, session
 import sqlite3
 
 from utils import generate_session_id
-
+from pymongo.mongo_client import MongoClient
+from urllib.parse import quote_plus
 
 app = Flask(__name__)
+# In production, all the secret keys should be read from environment variables
 app.secret_key = 'hades'
-
+user = 'hades'
+password = 'hades'
+host = '16.171.7.170'
+port = 27017
+uri = "mongodb://%s:%s@%s:%s" % (
+                quote_plus(user), quote_plus(password), host, port)
+client = MongoClient(uri)
+user_model = client['hades']['user_model']
+wishlist = client['hades']['wishlist']
 # set up the database
 conn = sqlite3.connect('database.db', check_same_thread=False)
 cursor = conn.cursor()
@@ -56,6 +66,29 @@ def logout():
     if session_id in session:
         session.pop(session_id)
         return {'message': 'Logged out successfully.'}
+    else:
+        return {'message': 'Invalid session ID.'}
+
+
+@app.route('/get_model', methods=['GET'])
+def get_model():
+    session_id = request.headers.get('session_id')
+    if session_id in session:
+        username = session[session_id]
+        u = user_model.find_one({'username': username})
+        return {'message': 'Model retrieved successfully.', 'data': u['model']}
+    else:
+        return {'message': 'Invalid session ID.'}
+
+
+@app.route('/update_model', methods=['POST'])
+def update_model():
+    session_id = request.headers.get('session_id')
+    if session_id in session:
+        username = session[session_id]
+        new_model = request.json['model']
+        user_model.update_one({'username': username}, {'$set': {'model': new_model}})
+        return {'message': 'Model updated successfully.'}
     else:
         return {'message': 'Invalid session ID.'}
 
