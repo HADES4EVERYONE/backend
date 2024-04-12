@@ -43,7 +43,7 @@ def register():
         return {'message': 'User already exists.'}
     else:
         # Insert the new user
-        cursor.execute("INSERT INTO users (realname, username, password) VALUES (?, ?)", (realname, username, password))
+        cursor.execute("INSERT INTO users (realname, username, password) VALUES (?, ?, ?)", (realname, username, password))
         return {'message': 'User created successfully.'}
 
 
