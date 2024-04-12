@@ -172,6 +172,8 @@ def rate():
 def recommend():
     session_id = request.headers.get('Authorization')
     item_type = request.args.get('type')
+    num_re = int(
+        request.args.get('num_re', 10))  # Default to 10 recommendations if not specified
     if item_type not in ['m', 't', 'g']:
         return {'message': 'Invalid item type.'}
     if session_id in session:
@@ -180,8 +182,8 @@ def recommend():
         ratings = list(ratings_collection.find({'username': username, 'type': item_type}))
         rated_items = [x['item_id'] for x in ratings]
 
-        recommendations = recommender.recommend(username, item_type, rated_items)
-        return {'message': 'Recommendations generated successfully.', 'data': recommendations}
+        recommendations = recommender.recommend(username, item_type, rated_items, n=num_re)
+        return {'message': f'{num_re} recommendations for {item_type} generated successfully.', 'data': recommendations}
     else:
         return {'message': 'Invalid session ID.'}
 
