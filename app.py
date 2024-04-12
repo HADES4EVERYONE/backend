@@ -23,6 +23,7 @@ cursor = conn.cursor()
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        realname TEXT NOT NULL,
         username TEXT NOT NULL,
         password TEXT NOT NULL
     )
@@ -32,6 +33,7 @@ conn.commit()
 
 @app.route('/register', methods=['POST'])
 def register():
+    realname = request.json['realname']
     username = request.json['username']
     password = request.json['password']
     # Check if the username already exists
@@ -41,7 +43,7 @@ def register():
         return {'message': 'User already exists.'}
     else:
         # Insert the new user
-        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
+        cursor.execute("INSERT INTO users (realname, username, password) VALUES (?, ?)", (realname, username, password))
         return {'message': 'User created successfully.'}
 
 
