@@ -62,7 +62,7 @@ def login():
 
 @app.route('/logout', methods=['POST'])
 def logout():
-    session_id = request.json['session_id']
+    session_id = request.headers.get('Authorization')
     if session_id in session:
         session.pop(session_id)
         return {'message': 'Logged out successfully.'}
@@ -72,7 +72,7 @@ def logout():
 
 @app.route('/get_model', methods=['GET'])
 def get_model():
-    session_id = request.headers.get('session_id')
+    session_id = request.headers.get('Authorization')
     if session_id in session:
         username = session[session_id]
         u = user_model_mg.find_one({'username': username})
@@ -83,7 +83,7 @@ def get_model():
 
 @app.route('/update_model', methods=['POST'])
 def update_model():
-    session_id = request.headers.get('session_id')
+    session_id = request.headers.get('Authorization')
     if session_id in session:
         username = session[session_id]
         new_model = request.json['model']
@@ -95,7 +95,7 @@ def update_model():
 
 @app.route('/get_wishlist', methods=['GET'])
 def get_wishlist():
-    session_id = request.headers.get('session_id')
+    session_id = request.headers.get('Authorization')
     if session_id in session:
         username = session[session_id]
         wish_list = wish_list_mg.find_one({'username': username})
@@ -106,7 +106,7 @@ def get_wishlist():
 
 @app.route('/update_wish_list', methods=['POST'])
 def add_to_wishlist():
-    session_id = request.headers.get('session_id')
+    session_id = request.headers.get('Authorization')
     if session_id in session:
         username = session[session_id]
         wish_list = request.json['wish_list']
@@ -118,7 +118,7 @@ def add_to_wishlist():
 
 @app.route('/rate', methods=['POST'])
 def rate():
-    session_id = request.headers.get('session_id')
+    session_id = request.headers.get('Authorization')
     if session_id in session:
         username = session[session_id]
         item_id = request.json['item_id']
@@ -155,7 +155,7 @@ def rate():
 
 @app.route('/recommend', methods=['GET'])
 def recommend():
-    session_id = request.headers.get('session_id')
+    session_id = request.headers.get('Authorization')
     item_type = request.args.get('type')
     if session_id in session:
         username = session[session_id]
@@ -171,7 +171,7 @@ def recommend():
 
 @app.route('/ratings', methods=['GET'])
 def get_ratings():
-    session_id = request.headers.get('session_id')
+    session_id = request.headers.get('Authorization')
     item_type = request.args.get('type')
     if session_id in session:
         username = session[session_id]
