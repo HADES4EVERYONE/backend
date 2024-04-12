@@ -1,4 +1,4 @@
-from flask import Flask, request, session
+from flask import Flask, request
 import sqlite3
 from utils import generate_session_id
 import Recommender
@@ -8,6 +8,7 @@ from db import user_model_mg,wish_list_mg,ratings_collection
 app = Flask(__name__)
 # In production, all the secret keys should be read from environment variables
 app.secret_key = 'hades'
+session = {}
 
 recommender = Recommender.OnlineRecommender()
 # set up the database
