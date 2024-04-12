@@ -76,7 +76,7 @@ def get_model():
     if session_id in session:
         username = session[session_id]
         u = user_model_mg.find_one({'username': username})
-        return {'message': 'Model retrieved successfully.', 'data': u['model']}
+        return {'message': 'Model retrieved successfully.', 'data': u['model'] if u else ""}
     else:
         return {'message': 'Invalid session ID.'}
 
@@ -99,7 +99,7 @@ def get_wishlist():
     if session_id in session:
         username = session[session_id]
         wish_list = wish_list_mg.find_one({'username': username})
-        return {'message': 'wishlist retrieved successfully.', 'data': wish_list['wish_list']}
+        return {'message': 'wishlist retrieved successfully.', 'data': wish_list['wish_list'] if wish_list else ""}
     else:
         return {'message': 'Invalid session ID.'}
 
