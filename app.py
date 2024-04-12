@@ -1,22 +1,15 @@
 from flask import Flask, request, session
 import sqlite3
-
 from utils import generate_session_id
-from pymongo.mongo_client import MongoClient
-from urllib.parse import quote_plus
+import Recommender
+from db import user_model_mg,wish_list_mg,ratings_collection
+
 
 app = Flask(__name__)
 # In production, all the secret keys should be read from environment variables
 app.secret_key = 'hades'
-user = 'hades'
-password = 'hades'
-host = '16.171.7.170'
-port = 27017
-uri = "mongodb://%s:%s@%s:%s" % (
-                quote_plus(user), quote_plus(password), host, port)
-client = MongoClient(uri)
-user_model_mg = client['hades']['user_model']
-wish_list_mg = client['hades']['wishlist']
+
+recommender = Recommender.OnlineRecommender()
 # set up the database
 conn = sqlite3.connect('database.db', check_same_thread=False)
 cursor = conn.cursor()
@@ -119,6 +112,71 @@ def add_to_wishlist():
         wish_list = request.json['wish_list']
         wish_list_mg.update_one({'username': username}, {'$set': {'wish_list': wish_list}})
         return {'message': 'wish_list updated successfully.'}
+    else:
+        return {'message': 'Invalid session ID.'}
+
+
+@app.route('/rate', methods=['POST'])
+def rate():
+    session_id = request.headers.get('session_id')
+    if session_id in session:
+        username = session[session_id]
+        item_id = request.json['item_id']
+        rating = request.json['rating']
+        item_type = request.json['type']
+
+        # check if the user has already rated the item
+        existing_rating = ratings_collection.find_one({
+            'username': username,
+            'item_id': item_id,
+            'type': item_type
+        })
+
+        if existing_rating:
+            # if exists, update the rating
+            ratings_collection.update_one(
+                {'_id': existing_rating['_id']},
+                {'$set': {'rating': rating}}
+            )
+        else:
+            # add new rating record
+            ratings_collection.insert_one({
+                'username': username,
+                'item_id': item_id,
+                'rating': rating,
+                'type': item_type
+            })
+
+        recommender.train(username, item_id, rating, item_type)
+        return {'message': 'Rating recorded successfully.'}
+    else:
+        return {'message': 'Invalid session ID.'}
+
+
+@app.route('/recommend', methods=['GET'])
+def recommend():
+    session_id = request.headers.get('session_id')
+    item_type = request.args.get('type')
+    if session_id in session:
+        username = session[session_id]
+
+        ratings = list(ratings_collection.find({'username': username, 'type': item_type}))
+        rated_items = [x['item_id'] for x in ratings]
+
+        recommendations = recommender.recommend(username, item_type, rated_items)
+        return {'message': 'Recommendations generated successfully.', 'data': recommendations}
+    else:
+        return {'message': 'Invalid session ID.'}
+
+
+@app.route('/ratings', methods=['GET'])
+def get_ratings():
+    session_id = request.headers.get('session_id')
+    item_type = request.args.get('type')
+    if session_id in session:
+        username = session[session_id]
+        ratings = list(ratings_collection.find({'username': username, 'type': item_type}, {'_id': 0}))
+        return {'message': 'Ratings retrieved successfully.', 'data': ratings}
     else:
         return {'message': 'Invalid session ID.'}
 
