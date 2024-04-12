@@ -88,7 +88,7 @@ def update_model():
     if session_id in session:
         username = session[session_id]
         new_model = request.json['model']
-        user_model_mg.update_one({'username': username}, {'$set': {'model': new_model}})
+        user_model_mg.update_one({'username': username}, {'$set': {'model': new_model}}, upsert=True)
         return {'message': 'Model updated successfully.'}
     else:
         return {'message': 'Invalid session ID.'}
@@ -111,7 +111,7 @@ def add_to_wishlist():
     if session_id in session:
         username = session[session_id]
         wish_list = request.json['wish_list']
-        wish_list_mg.update_one({'username': username}, {'$set': {'wish_list': wish_list}})
+        wish_list_mg.update_one({'username': username}, {'$set': {'wish_list': wish_list}}, upsert=True)
         return {'message': 'wish_list updated successfully.'}
     else:
         return {'message': 'Invalid session ID.'}
@@ -140,7 +140,7 @@ def rate():
             # if exists, update the rating
             ratings_collection.update_one(
                 {'_id': existing_rating['_id']},
-                {'$set': {'rating': rating}}
+                {'$set': {'rating': rating}}, upsert=True
             )
         else:
             # add new rating record
