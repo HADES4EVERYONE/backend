@@ -1,9 +1,11 @@
-from flask import Flask, request
+import re
+from flask import Flask, request, jsonify
 import sqlite3
 from utils import generate_session_id
 import Recommender
-from db import user_model_mg,wish_list_mg,ratings_collection
-
+from db import user_model_mg,wish_list_mg,ratings_collection,genres_collection
+from config import TMDB_API_KEY, RAWG_API_KEY, TMDB_ACCESS_TOKEN
+import requests
 
 app = Flask(__name__)
 # In production, all the secret keys should be read from environment variables
@@ -190,6 +192,111 @@ def get_ratings():
             return {'message': 'Invalid item type.'}
     else:
         return {'message': 'Invalid session ID.'}
+
+
+@app.route('/import_genres', methods=['GET'])
+def import_genres():
+    headers = {
+        'Authorization': f'Bearer {TMDB_ACCESS_TOKEN}',
+        'accept': 'application/json'
+    }
+
+    # Import TMDB movie genres
+    tmdb_movie_url = "https://api.themoviedb.org/3/genre/movie/list?language=en"
+    tmdb_movie_response = requests.get(tmdb_movie_url, headers=headers).json()
+    tmdb_movie_genres = tmdb_movie_response.get('genres', [])
+    for genre in tmdb_movie_genres:
+        genre_document = {
+            'external_id': genre['id'],
+            'name': genre['name'],
+            'type': 'm',  # 'm' for movies
+            'source': 'TMDB'
+        }
+        genres_collection.update_one(
+            {'external_id': genre['id'], 'type': 'm', 'source': 'TMDB'},
+            {'$set': genre_document},
+            upsert=True
+        )
+
+    # Import TMDB TV genres
+    tmdb_tv_url = "https://api.themoviedb.org/3/genre/tv/list?language=en"
+    tmdb_tv_response = requests.get(tmdb_tv_url, headers=headers).json()
+    tmdb_tv_genres = tmdb_tv_response.get('genres', [])
+    for genre in tmdb_tv_genres:
+        genre_document = {
+            'external_id': genre['id'],
+            'name': genre['name'],
+            'type': 't',  # 't' for TV shows
+            'source': 'TMDB'
+        }
+        genres_collection.update_one(
+            {'external_id': genre['id'], 'type': 't', 'source': 'TMDB'},
+            {'$set': genre_document},
+            upsert=True
+        )
+
+    # Import RAWG genres
+    rawg_url = f"https://api.rawg.io/api/genres?key={RAWG_API_KEY}"
+    rawg_response = requests.get(rawg_url).json()
+    rawg_genres = rawg_response.get('results', [])
+    for genre in rawg_genres:
+        genre_document = {
+            'external_id': genre['id'],
+            'name': genre['name'],
+            'type': 'g',  # 'g' for games
+            'source': 'RAWG'
+        }
+        genres_collection.update_one(
+            {'external_id': genre['id'], 'type': 'g', 'source': 'RAWG'},
+            {'$set': genre_document},
+            upsert=True
+        )
+
+    return {'message': 'Genres imported successfully.'}
+
+
+@app.route('/get_genres_by_type', methods=['GET'])
+def get_genres_by_type():
+    genre_type = request.args.get('type')
+
+    if not genre_type:
+        return jsonify({'error': 'Missing type parameter'}), 400
+
+    query_result = genres_collection.find({'type': genre_type}, {'_id': 0})
+
+    genres = list(query_result)
+
+    if genres:
+        return jsonify({'genres': genres})
+    else:
+        return jsonify({'error': 'No genres found for the given type'}), 404
+
+
+@app.route('/get_genre_id', methods=['GET'])
+def get_genre_id():
+    # Get genre ID by name and type
+    genre_name = request.args.get('name')
+    genre_type = request.args.get('type')
+
+    # Make sure the name and type parameters are provided
+    if not genre_name or not genre_type:
+        return jsonify({'error': 'Missing name or type parameter'}), 400
+
+    regex_pattern = re.compile('.*' + re.escape(genre_name) + '.*', re.IGNORECASE)
+
+    # Look up the genre in the database
+    query_result = genres_collection.find({
+        'name': regex_pattern,
+        'type': genre_type
+    }, {'_id': 0, 'external_id': 1})
+
+    # Extract the genre IDs
+    genre_ids = [genre['external_id'] for genre in query_result]
+
+    if genre_ids:
+        return jsonify({'genre_ids': genre_ids})
+    else:
+        return jsonify({'error': 'Genre not found'}), 404
 
 
 if __name__ == '__main__':

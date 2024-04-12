@@ -12,3 +12,4 @@ client = MongoClient(uri)
 ratings_collection = client['hades']['ratings']
 user_model_mg = client['hades']['user_model']
 wish_list_mg = client['hades']['wishlist']
+genres_collection = client['hades']['all_genres']
