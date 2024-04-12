@@ -26,6 +26,8 @@ class OnlineRecommender:
             'g': False
         }
 
+    def reset_training_flags(self, item_type):
+        self.is_trained[item_type] = False
 
     def get_items_by_genre(self, item_type, genre_id, page=1):
         if item_type == 'm':
@@ -98,5 +100,5 @@ class OnlineRecommender:
                 score = rating * weight * (avg_rating / 10)  # Adjust the score based on the average rating
                 recommendations.append((item_id, score))
 
+        self.reset_training_flags(item_type)
         return sorted(recommendations, key=lambda x: x[1], reverse=True)[:n]
-
