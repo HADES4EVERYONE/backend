@@ -57,7 +57,8 @@ def login():
     if user:
         new_session_id = generate_session_id()
         session[new_session_id] = username
-        return {'message': 'Login successful.', 'data': {'session_id': new_session_id}}
+        return {'message': 'Login successful.', 'data':
+            {'session_id': new_session_id, 'username': username, 'realname': user[1]}}
     else:
         return {'message': 'Incorrect username or password.'}
 
