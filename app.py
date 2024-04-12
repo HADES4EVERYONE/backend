@@ -44,7 +44,11 @@ def register():
     else:
         # Insert the new user
         cursor.execute("INSERT INTO users (realname, username, password) VALUES (?, ?, ?)", (realname, username, password))
-        return {'message': 'User created successfully.'}
+        # login the user
+        new_session_id = generate_session_id()
+        session[new_session_id] = username
+        return {'message': 'User created successfully.',
+                'data': {'session_id': new_session_id, 'realname': realname, 'username': username}}
 
 
 @app.route('/login', methods=['POST'])
