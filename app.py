@@ -124,7 +124,7 @@ def rate():
         item_id = request.json['item_id']
         rating = request.json['rating']
         item_type = request.json['type']
-        print(f'Recorde rating for {username} on item {item_id} with rating {rating} and type {item_type}')
+        # print(f'Recorde rating for {username} on item {item_id} with rating {rating} and type {item_type}')
         if item_type not in ['m', 't', 'g']:
             return {'message': 'Invalid item type.'}
 
@@ -180,9 +180,9 @@ def get_ratings():
     item_type = request.args.get('type')
     if session_id in session:
         username = session[session_id]
-        print(f'Get ratings for {username} with type {item_type}')
+        # print(f'Get ratings for {username} with type {item_type}')
         if item_type in ['m', 't', 'g']:
-            print(f'Get ratings for {username} with type {item_type} now is processing')
+            # print(f'Get ratings for {username} with type {item_type} now is processing')
             ratings = list(ratings_collection.find({'username': username, 'type': item_type}, {'_id': 0}))
             return {'message': 'Ratings retrieved successfully.', 'data': ratings}
         else:
