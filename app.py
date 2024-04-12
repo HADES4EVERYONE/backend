@@ -3,9 +3,10 @@ from flask import Flask, request, jsonify
 import sqlite3
 from utils import generate_session_id
 import Recommender
-from db import user_model_mg,wish_list_mg,ratings_collection,genres_collection
+from db import user_model_mg, wish_list_mg, ratings_collection, genres_collection
 from config import TMDB_API_KEY, RAWG_API_KEY, TMDB_ACCESS_TOKEN
 import requests
+import random
 
 app = Flask(__name__)
 # In production, all the secret keys should be read from environment variables
@@ -39,7 +40,8 @@ def register():
         return {'message': 'User already exists.'}
     else:
         # Insert the new user
-        cursor.execute("INSERT INTO users (realname, username, password) VALUES (?, ?, ?)", (realname, username, password))
+        cursor.execute("INSERT INTO users (realname, username, password) VALUES (?, ?, ?)",
+                       (realname, username, password))
         # login the user
         new_session_id = generate_session_id()
         session[new_session_id] = username
@@ -304,6 +306,102 @@ def get_genre_id():
         return jsonify({'genre_ids': genre_ids})
     else:
         return jsonify({'error': 'Genre not found'}), 404
+
+
+@app.route('/random_rate', methods=['POST'])
+def random_rate():
+    session_id = request.headers.get('Authorization')
+    if session_id not in session:
+        return {'message': 'Invalid session ID.'}, 401
+
+    # Get the number of ratings to generate from the request, default to 10 if not specified
+    num_ratings = request.json.get('num_ratings', 10)
+
+    username = session[session_id]
+    item_types = ['m', 't', 'g']  # Assume these are your item types: movies, TV shows, and games
+
+    for _ in range(num_ratings):
+        item_type = random.choice(item_types)
+        item_id = get_random_item_id(item_type)
+        if item_id is None:
+            continue  # Skip if no item was found
+
+        rating = random.randint(1, 5)  # Generate a random rating between 1 and 5 (adjusted from 1-10)
+
+        # Check if the user has already rated the item
+        existing_rating = ratings_collection.find_one({
+            'username': username,
+            'item_id': item_id,
+            'type': item_type
+        })
+
+        if existing_rating:
+            # Update the rating if it already exists
+            ratings_collection.update_one(
+                {'_id': existing_rating['_id']},
+                {'$set': {'rating': rating}}
+            )
+        else:
+            # Add a new rating record if it doesn't exist
+            ratings_collection.insert_one({
+                'username': username,
+                'item_id': item_id,
+                'rating': rating,
+                'type': item_type
+            })
+
+    return {'message': f'{num_ratings} random ratings generated successfully.'}
+
+
+def get_random_item_id(item_type):
+    max_retries = 5  # Maximum number of attempts to find a non-empty page
+    attempts = 0
+
+    while attempts < max_retries:
+        page = random.randint(1, 500)  # Random page number between 1 and 500
+
+        if item_type == 'm':  # Movies
+            url = 'https://api.themoviedb.org/3/discover/movie'
+            params = {
+                'include_adult': 'false',
+                'include_video': 'false',
+                'language': 'en-US',
+                'sort_by': 'popularity.desc',
+                'page': page,
+                'api_key': TMDB_API_KEY
+            }
+        elif item_type == 't':  # TV Shows
+            url = 'https://api.themoviedb.org/3/discover/tv'
+            params = {
+                'include_adult': 'false',
+                'language': 'en-US',
+                'sort_by': 'popularity.desc',
+                'page': page,
+                'api_key': TMDB_API_KEY
+            }
+        elif item_type == 'g':  # Games
+            url = 'https://api.rawg.io/api/games'
+            params = {
+                'page': page,
+                'key': RAWG_API_KEY
+            }
+        else:
+            return None  # Invalid item type
+
+        try:
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            items = data['results']
+            if items:
+                return random.choice(items)['id']  # Successfully found a non-empty page
+        except requests.RequestException as e:
+            print(f"API request failed: {e}")
+            # Continue to the next attempt if the API call fails or the page is empty
+
+        attempts += 1  # Increment the attempt counter
+
+    return None  # Return None if all retries are exhausted without success
 
 
 if __name__ == '__main__':

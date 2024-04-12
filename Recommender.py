@@ -26,6 +26,7 @@ class OnlineRecommender:
             'g': False
         }
 
+
     def get_items_by_genre(self, item_type, genre_id, page=1):
         if item_type == 'm':
             url = f'https://api.themoviedb.org/3/discover/movie?with_genres={genre_id}&page={page}&api_key={TMDB_API_KEY}'
