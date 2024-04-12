@@ -15,8 +15,8 @@ port = 27017
 uri = "mongodb://%s:%s@%s:%s" % (
                 quote_plus(user), quote_plus(password), host, port)
 client = MongoClient(uri)
-user_model = client['hades']['user_model']
-wishlist = client['hades']['wishlist']
+user_model_mg = client['hades']['user_model']
+wish_list_mg = client['hades']['wishlist']
 # set up the database
 conn = sqlite3.connect('database.db', check_same_thread=False)
 cursor = conn.cursor()
@@ -75,7 +75,7 @@ def get_model():
     session_id = request.headers.get('session_id')
     if session_id in session:
         username = session[session_id]
-        u = user_model.find_one({'username': username})
+        u = user_model_mg.find_one({'username': username})
         return {'message': 'Model retrieved successfully.', 'data': u['model']}
     else:
         return {'message': 'Invalid session ID.'}
@@ -87,8 +87,31 @@ def update_model():
     if session_id in session:
         username = session[session_id]
         new_model = request.json['model']
-        user_model.update_one({'username': username}, {'$set': {'model': new_model}})
+        user_model_mg.update_one({'username': username}, {'$set': {'model': new_model}})
         return {'message': 'Model updated successfully.'}
+    else:
+        return {'message': 'Invalid session ID.'}
+
+
+@app.route('/get_wishlist', methods=['GET'])
+def get_wishlist():
+    session_id = request.headers.get('session_id')
+    if session_id in session:
+        username = session[session_id]
+        wish_list = wish_list_mg.find_one({'username': username})
+        return {'message': 'wishlist retrieved successfully.', 'data': wish_list['wish_list']}
+    else:
+        return {'message': 'Invalid session ID.'}
+
+
+@app.route('/update_wish_list', methods=['POST'])
+def add_to_wishlist():
+    session_id = request.headers.get('session_id')
+    if session_id in session:
+        username = session[session_id]
+        wish_list = request.json['wish_list']
+        wish_list_mg.update_one({'username': username}, {'$set': {'wish_list': wish_list}})
+        return {'message': 'wish_list updated successfully.'}
     else:
         return {'message': 'Invalid session ID.'}
 
