@@ -91,6 +91,13 @@ def update_model():
         username = session[session_id]
         new_model = request.json['model']
         user_model_mg.update_one({'username': username}, {'$set': {'model': new_model}}, upsert=True)
+
+        # Train the recommender with the new model
+        for item_type in ['m', 't', 'g']:
+            ratings = list(ratings_collection.find({'username': username, 'type': item_type}))
+            for rating in ratings:
+                recommender.train(username, rating['item_id'], rating['rating'], item_type)
+
         return {'message': 'Model updated successfully.'}
     else:
         return {'message': 'Invalid session ID.'}
