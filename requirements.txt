@@ -4,3 +4,4 @@ pymongo~=3.10.0
 scikit-surprise
 pandas~=2.0.3
 requests
+flask_cors
