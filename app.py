@@ -1,5 +1,6 @@
 import re
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import sqlite3
 from utils import generate_session_id
 import Recommender
@@ -9,6 +10,7 @@ import requests
 import random
 
 app = Flask(__name__)
+CORS(app)
 # In production, all the secret keys should be read from environment variables
 app.secret_key = 'hades'
 session = {}
