@@ -8,6 +8,7 @@ from db import user_model_mg, wish_list_mg, ratings_collection, genres_collectio
 from config import TMDB_API_KEY, RAWG_API_KEY, TMDB_ACCESS_TOKEN
 import requests
 import random
+import logging
 
 app = Flask(__name__)
 CORS(app)
@@ -277,18 +278,27 @@ def get_wishlist():
     session_doc = session_collection.find_one({'_id': session_id})
     if session_doc:
         username = session_doc['username']
-        # Retrieve all wishlist items for this user
-        wish_list_cursor = wish_list_mg.find({'username': username})
+        user_wishlist_items = wish_list_mg.find({'username': username})
         all_wish_list_items = []
-        for item in wish_list_cursor:
-            item_id = item.get('item_id', 'Unknown ID')
-            name = item.get('name', 'No Name Provided')
-            item_type = item.get('type', 'Unknown Type')
-            all_wish_list_items.append({'item_id': item_id, 'name': name, 'type': item_type})
+
+        for item in user_wishlist_items:
+            # Check if the item uses a nested 'wish_list' structure
+            if 'wish_list' in item:
+                for nested_item in item['wish_list']:
+                    process_wishlist_item(nested_item, all_wish_list_items)
+            else:
+                process_wishlist_item(item, all_wish_list_items)
 
         return jsonify({'message': 'Wishlist retrieved successfully.', 'data': all_wish_list_items})
     else:
         return jsonify({'message': 'Invalid session ID.'}), 401
+
+def process_wishlist_item(item, all_wish_list_items):
+    item_id = item.get('item_id', 'Unknown ID')
+    name = item.get('name', 'No Name Provided')
+    item_type = item.get('type', 'Unknown Type')
+    all_wish_list_items.append({'item_id': item_id, 'name': name, 'type': item_type})
+
 
 
 @app.route('/rate', methods=['POST'])
