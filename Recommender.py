@@ -1,8 +1,9 @@
+import re
 import pandas as pd
 from surprise import SVD, KNNBasic
 from surprise import Dataset, Reader
 from collections import defaultdict
-from db import ratings_collection, user_model_mg
+from db import ratings_collection, user_model_mg, genres_collection
 import requests
 from config import TMDB_API_KEY, RAWG_API_KEY, TMDB_ACCESS_TOKEN
 
@@ -73,32 +74,69 @@ class OnlineRecommender:
     def recommend(self, username, item_type, rated_items, n=10):
         user_model = user_model_mg.find_one({'username': username})
         if user_model and 'genres' in user_model['model']:
-            genre_weights = {genre['id']: genre['weight'] for genre in user_model['model']['genres'] if
-                             genre['type'] == item_type}
+            genre_weights = {genre['name']: (genre['weight'], genre['type']) for genre in user_model['model']['genres']}
         else:
             genre_weights = {}
 
+        # Calculate type weights
+        type_weights = {}
+        for genre_name, (weight, genre_type) in genre_weights.items():
+            type_weights[genre_type] = type_weights.get(genre_type, 0) + weight
+
+        # Normalize type weights
+        total_weight = sum(type_weights.values())
+        type_weights = {t: w / total_weight for t, w in type_weights.items()}
+        print(f'Type weights: {type_weights}, total weight: {total_weight}')
+
+        # Find the top genres in other types
+        top_genres = {}
+        for genre_name, (weight, genre_type) in genre_weights.items():
+            if genre_type != item_type:
+                top_genres[genre_type] = top_genres.get(genre_type, []) + [(genre_name, weight)]
+
+        for genre_type in top_genres:
+            top_genres[genre_type] = sorted(top_genres[genre_type], key=lambda x: x[1], reverse=True)[:3]
+
         items = []
-        for genre_id, weight in genre_weights.items():
-            page = 1
-            while True:
-                genre_items = self.get_items_by_genre(item_type, genre_id, page)
-                if not genre_items:
-                    break
-                if item_type == 'g':
-                    items.extend([(item['id'], weight, item['rating']) for item in genre_items['results']])
-                else:
-                    items.extend([(item['id'], weight, item['vote_average']) for item in genre_items['results']])
-                page += 1
-                if len(items) >= weight * 20:
-                    break
+        for genre_type in top_genres:
+            for genre_name, weight in top_genres[genre_type]:
+                genre_ids = self.get_genre_ids(genre_name, item_type)
+                for genre_id in genre_ids:
+                    page = 1
+                    while True:
+                        genre_items = self.get_items_by_genre(item_type, genre_id, page)
+                        if not genre_items:
+                            break
+                        if item_type == 'g':
+                            items.extend([(item['id'], weight * type_weights[genre_type], item['rating']) for item in
+                                          genre_items['results']])
+                        else:
+                            items.extend(
+                                [(item['id'], weight * type_weights[genre_type], item['vote_average']) for item in
+                                 genre_items['results']])
+                        page += 1
+                        if len(items) >= weight * 20:
+                            break
 
         recommendations = []
         for item_id, weight, avg_rating in items:
             if item_id not in rated_items:
                 rating = self.predict(username, item_id, item_type)
-                score = rating * weight * (avg_rating / 10)  # Adjust the score based on the average rating
+                score = rating * weight * (avg_rating / 10)
                 recommendations.append((item_id, score))
 
         self.reset_training_flags(item_type)
         return sorted(recommendations, key=lambda x: x[1], reverse=True)[:n]
+
+    def get_genre_ids(self, genre_name, genre_type):
+        regex_pattern = re.compile('.*' + re.escape(genre_name) + '.*', re.IGNORECASE)
+
+        query_result = genres_collection.find({
+            'name': regex_pattern,
+            'type': genre_type
+        }, {'_id': 0, 'external_id': 1})
+
+        genre_ids = [genre['external_id'] for genre in query_result]
+
+        # print(f"Fetched genre IDs for {genre_name} of type {genre_type}: {genre_ids}")
+        return genre_ids
