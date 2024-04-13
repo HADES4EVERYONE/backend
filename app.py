@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify
 import sqlite3
 from utils import generate_session_id
 import Recommender
-from db import user_model_mg, wish_list_mg, ratings_collection, genres_collection
+from db import user_model_mg, wish_list_mg, ratings_collection, genres_collection, session_collection, users_collection
 from config import TMDB_API_KEY, RAWG_API_KEY, TMDB_ACCESS_TOKEN
 import requests
 import random
@@ -28,111 +28,257 @@ cursor.execute('''
 conn.commit()
 
 
+# @app.route('/register', methods=['POST'])
+# def register():
+#     realname = request.json['realname']
+#     username = request.json['username']
+#     password = request.json['password']
+#     # Check if the username already exists
+#     cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+#     user = cursor.fetchone()
+#     if user:
+#         return {'message': 'User already exists.'}
+#     else:
+#         # Insert the new user
+#         cursor.execute("INSERT INTO users (realname, username, password) VALUES (?, ?, ?)",
+#                        (realname, username, password))
+#         # login the user
+#         new_session_id = generate_session_id()
+#         session[new_session_id] = username
+#         return {'message': 'User created successfully.',
+#                 'data': {'session_id': new_session_id, 'realname': realname, 'username': username}}
+
+
 @app.route('/register', methods=['POST'])
 def register():
     realname = request.json['realname']
     username = request.json['username']
     password = request.json['password']
-    # Check if the username already exists
-    cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
-    user = cursor.fetchone()
-    if user:
-        return {'message': 'User already exists.'}
-    else:
-        # Insert the new user
-        cursor.execute("INSERT INTO users (realname, username, password) VALUES (?, ?, ?)",
-                       (realname, username, password))
-        conn.commit()
-        # login the user
-        new_session_id = generate_session_id()
-        session[new_session_id] = username
-        return {'message': 'User created successfully.',
-                'data': {'session_id': new_session_id, 'realname': realname, 'username': username}}
 
+
+    # Check if the username already exists
+    if users_collection.find_one({"username": username}):
+        return jsonify({'message': 'User already exists.'}), 409  # HTTP 409 Conflict for existing resource
+
+    # Insert the new user
+    users_collection.insert_one({
+        "realname": realname,
+        "username": username,
+        "password": password  # Note: In production, ensure password is hashed
+    })
+
+    # Login the user by creating a session
+    new_session_id = generate_session_id()
+    session_collection.insert_one({'_id': new_session_id, 'username': username})
+
+    return jsonify({
+        'message': 'User created successfully.',
+        'data': {
+            'session_id': new_session_id,
+            'realname': realname,
+            'username': username
+        }
+    })
+
+
+# @app.route('/login', methods=['POST'])
+# def login():
+#     username = request.json['username']
+#     password = request.json['password']
+#     # Check if the username and password are correct
+#     cursor.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password))
+#     user = cursor.fetchone()
+#     if user:
+#         new_session_id = generate_session_id()
+#         session[new_session_id] = username
+#         return {'message': 'Login successful.', 'data':
+#             {'session_id': new_session_id, 'username': username, 'realname': user[1]}}
+#     else:
+#         return {'message': 'Incorrect username or password.'}
 
 @app.route('/login', methods=['POST'])
 def login():
     username = request.json['username']
     password = request.json['password']
+
     # Check if the username and password are correct
-    cursor.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password))
-    user = cursor.fetchone()
+    user = users_collection.find_one({"username": username, "password": password})
+
     if user:
         new_session_id = generate_session_id()
-        session[new_session_id] = username
-        return {'message': 'Login successful.', 'data':
-            {'session_id': new_session_id, 'username': username, 'realname': user[1]}}
-    else:
-        return {'message': 'Incorrect username or password.'}
+        session_collection.insert_one({'_id': new_session_id, 'username': username})
 
+        return jsonify({
+            'message': 'Login successful.',
+            'data': {
+                'session_id': new_session_id,
+                'username': username,
+                'realname': user['realname']  # Retrieve realname from the MongoDB document
+            }
+        })
+    else:
+        return jsonify({'message': 'Incorrect username or password.'}), 401
+
+
+# @app.route('/logout', methods=['POST'])
+# def logout():
+#     session_id = request.headers.get('Authorization')
+#     if session_id in session:
+#         session.pop(session_id)
+#         return {'message': 'Logged out successfully.'}
+#     else:
+#         return jsonify({'message': 'Invalid session ID.'}), 401
 
 @app.route('/logout', methods=['POST'])
 def logout():
     session_id = request.headers.get('Authorization')
-    if session_id in session:
-        session.pop(session_id)
+    if session_id:
+        session_collection.delete_one({'_id': session_id})
         return {'message': 'Logged out successfully.'}
     else:
-        return {'message': 'Invalid session ID.'}
+        return jsonify({'message': 'Invalid session ID.'}), 401
 
 
 @app.route('/get_model', methods=['GET'])
 def get_model():
     session_id = request.headers.get('Authorization')
-    if session_id in session:
-        username = session[session_id]
+    session_doc = session_collection.find_one({'_id': session_id})
+    if session_doc:
+        username = session_doc['username']
         u = user_model_mg.find_one({'username': username})
         return {'message': 'Model retrieved successfully.', 'data': u['model'] if u else ""}
     else:
-        return {'message': 'Invalid session ID.'}
+        return jsonify({'message': 'Invalid session ID.'}), 401
 
 
 @app.route('/update_model', methods=['POST'])
 def update_model():
     session_id = request.headers.get('Authorization')
-    if session_id in session:
-        username = session[session_id]
+    session_doc = session_collection.find_one({'_id': session_id})
+    if session_doc:
+        username = session_doc['username']
         new_model = request.json['model']
         user_model_mg.update_one({'username': username}, {'$set': {'model': new_model}}, upsert=True)
         return {'message': 'Model updated successfully.'}
     else:
-        return {'message': 'Invalid session ID.'}
+        return jsonify({'message': 'Invalid session ID.'}), 401
+
+
+# @app.route('/get_wishlist', methods=['GET'])
+# def get_wishlist():
+#     session_id = request.headers.get('Authorization')
+#     if session_id in session:
+#         username = session[session_id]
+#         wish_list = wish_list_mg.find_one({'username': username})
+#         return {'message': 'wishlist retrieved successfully.', 'data': wish_list['wish_list'] if wish_list else ""}
+#     else:
+#         return jsonify({'message': 'Invalid session ID.'}), 401
+
+
+# @app.route('/update_wish_list', methods=['POST'])
+# def add_to_wishlist():
+#     session_id = request.headers.get('Authorization')
+#     if session_id in session:
+#         username = session[session_id]
+#         wish_list = request.json['wish_list']
+#         wish_list_mg.update_one({'username': username}, {'$set': {'wish_list': wish_list}}, upsert=True)
+#         return {'message': 'wish_list updated successfully.'}
+#     else:
+#         return jsonify({'message': 'Invalid session ID.'}), 401
+
+
+@app.route('/add_to_wishlist', methods=['POST'])
+def add_to_wishlist():
+    session_id = request.headers.get('Authorization')
+    session_doc = session_collection.find_one({'_id': session_id})
+    if session_doc:
+        username = session_doc['username']
+        item_id = request.json['item_id']
+        item_type = request.json.get('type')  # Default type can be set as 'general'
+
+        if item_type not in ['m', 't', 'g']:
+            return jsonify({'message': 'Invalid item type.'}), 400
+
+        # Check if the item already exists in the wishlist to prevent duplicates
+        existing_item = wish_list_mg.find_one({'username': username, 'item_id': item_id, 'type': item_type})
+
+        if existing_item:
+            return jsonify({'message': 'Item already exists in the wishlist.'}), 409
+
+        # Add new wishlist item if it doesn't exist
+        wish_list_mg.insert_one({'username': username, 'item_id': item_id, 'type': item_type})
+
+        return jsonify({'message': 'wishlist updated successfully.'})
+    else:
+        return jsonify({'message': 'Invalid session ID.'}), 401
+
+
+@app.route('/remove_from_wishlist', methods=['DELETE'])
+def remove_from_wishlist():
+    session_id = request.headers.get('Authorization')
+    session_doc = session_collection.find_one({'_id': session_id})
+    if session_doc:
+        username = session_doc['username']
+        item_id = request.args.get('item_id')
+        item_type = request.args.get('type')
+
+        if item_type not in ['m', 't', 'g']:
+            return jsonify({'message': 'Invalid item type.'}), 400
+
+        result = wish_list_mg.delete_one({'username': username, 'item_id': item_id, 'type': item_type})
+        if result.deleted_count > 0:
+            return jsonify({'message': 'Item removed successfully.'})
+        else:
+            return jsonify({'message': 'Item not found in wishlist.'}), 404
+    else:
+        return jsonify({'message': 'Invalid session ID.'}), 401
+
+
+@app.route('/check_wishlist', methods=['POST'])
+def check_wishlist():
+    session_id = request.headers.get('Authorization')
+    session_doc = session_collection.find_one({'_id': session_id})
+    if session_doc:
+        username = session_doc['username']
+        item_id = request.json['item_id']
+        item_type = request.json.get('type')
+
+        if item_type not in ['m', 't', 'g']:  # Assuming 'm', 't', 'g' stand for movie, tv-show, game respectively.
+            return jsonify({'message': 'Invalid item type.'}), 400
+
+        # Check if the item exists in the wishlist
+        exists = wish_list_mg.find_one({'username': username, 'item_id': item_id, 'type': item_type}) is not None
+        return jsonify({'message': 'Check completed.', 'in_wishlist': exists})
+    else:
+        return jsonify({'message': 'Invalid session ID.'}), 401
 
 
 @app.route('/get_wishlist', methods=['GET'])
 def get_wishlist():
     session_id = request.headers.get('Authorization')
-    if session_id in session:
-        username = session[session_id]
-        wish_list = wish_list_mg.find_one({'username': username})
-        return {'message': 'wishlist retrieved successfully.', 'data': wish_list['wish_list'] if wish_list else ""}
+    session_doc = session_collection.find_one({'_id': session_id})
+    if session_doc:
+        username = session_doc['username']
+        # Retrieve all wishlist items for this user
+        wish_list_cursor = wish_list_mg.find({'username': username})
+        all_wish_list_items = [{'item_id': item['item_id'], 'type': item.get('type', 'general')} for item in wish_list_cursor]
+        return jsonify({'message': 'Wishlist retrieved successfully.', 'data': all_wish_list_items})
     else:
-        return {'message': 'Invalid session ID.'}
-
-
-@app.route('/update_wish_list', methods=['POST'])
-def add_to_wishlist():
-    session_id = request.headers.get('Authorization')
-    if session_id in session:
-        username = session[session_id]
-        wish_list = request.json['wish_list']
-        wish_list_mg.update_one({'username': username}, {'$set': {'wish_list': wish_list}}, upsert=True)
-        return {'message': 'wish_list updated successfully.'}
-    else:
-        return {'message': 'Invalid session ID.'}
+        return jsonify({'message': 'Invalid session ID.'}), 401
 
 
 @app.route('/rate', methods=['POST'])
 def rate():
     session_id = request.headers.get('Authorization')
-    if session_id in session:
-        username = session[session_id]
+    session_doc = session_collection.find_one({'_id': session_id})
+    if session_doc:
+        username = session_doc['username']
         item_id = request.json['item_id']
         rating = request.json['rating']
         item_type = request.json['type']
         # print(f'Recorde rating for {username} on item {item_id} with rating {rating} and type {item_type}')
         if item_type not in ['m', 't', 'g']:
-            return {'message': 'Invalid item type.'}
+            return jsonify({'message': 'Invalid item type.'}), 400
 
         # check if the user has already rated the item
         existing_rating = ratings_collection.find_one({
@@ -158,19 +304,20 @@ def rate():
 
         return {'message': 'Rating recorded successfully.'}
     else:
-        return {'message': 'Invalid session ID.'}
+        return jsonify({'message': 'Invalid session ID.'}), 401
 
 
 @app.route('/recommend', methods=['GET'])
 def recommend():
     session_id = request.headers.get('Authorization')
+    session_doc = session_collection.find_one({'_id': session_id})
     item_type = request.args.get('type')
     num_re = int(
         request.args.get('num_re', 10))  # Default to 10 recommendations if not specified
     if item_type not in ['m', 't', 'g']:
-        return {'message': 'Invalid item type.'}
-    if session_id in session:
-        username = session[session_id]
+        return jsonify({'message': 'Invalid item type.'}), 400
+    if session_doc:
+        username = session_doc['username']
 
         ratings = list(ratings_collection.find({'username': username, 'type': item_type}))
         rated_items = [x['item_id'] for x in ratings]
@@ -178,24 +325,25 @@ def recommend():
         recommendations = recommender.recommend(username, item_type, rated_items, n=num_re)
         return {'message': f'{num_re} recommendations for {item_type} generated successfully.', 'data': recommendations}
     else:
-        return {'message': 'Invalid session ID.'}
+        return jsonify({'message': 'Invalid session ID.'}), 401
 
 
 @app.route('/ratings', methods=['GET'])
 def get_ratings():
     session_id = request.headers.get('Authorization')
     item_type = request.args.get('type')
-    if session_id in session:
-        username = session[session_id]
+    session_doc = session_collection.find_one({'_id': session_id})
+    if session_doc:
+        username = session_doc['username']
         # print(f'Get ratings for {username} with type {item_type}')
         if item_type in ['m', 't', 'g']:
             # print(f'Get ratings for {username} with type {item_type} now is processing')
             ratings = list(ratings_collection.find({'username': username, 'type': item_type}, {'_id': 0}))
             return {'message': 'Ratings retrieved successfully.', 'data': ratings}
         else:
-            return {'message': 'Invalid item type.'}
+            return jsonify({'message': 'Invalid item type.'}), 400
     else:
-        return {'message': 'Invalid session ID.'}
+        return jsonify({'message': 'Invalid session ID.'}), 401
 
 
 @app.route('/import_genres', methods=['GET'])
@@ -306,13 +454,16 @@ def get_genre_id():
 @app.route('/random_rate', methods=['POST'])
 def random_rate():
     session_id = request.headers.get('Authorization')
-    if session_id not in session:
-        return {'message': 'Invalid session ID.'}, 401
+    session_doc = session_collection.find_one({'_id': session_id})
+
+    if not session_doc:
+        return jsonify({'message': 'Invalid session ID.'}), 401
 
     # Get the number of ratings to generate from the request, default to 10 if not specified
     num_ratings = request.json.get('num_ratings', 10)
 
-    username = session[session_id]
+    username = session_doc['username']
+
     item_types = ['m', 't', 'g']  # Assume these are your item types: movies, TV shows, and games
 
     for _ in range(num_ratings):

@@ -9,6 +9,8 @@ uri = "mongodb://%s:%s@%s:%s" % (
                 quote_plus(user), quote_plus(password), host, port)
 client = MongoClient(uri)
 
+users_collection = client['hades']['users']
+session_collection = client['hades']['sessions']
 ratings_collection = client['hades']['ratings']
 user_model_mg = client['hades']['user_model']
 wish_list_mg = client['hades']['wishlist']
