@@ -226,23 +226,39 @@ def remove_from_wishlist():
     session_doc = session_collection.find_one({'_id': session_id})
     if session_doc:
         username = session_doc['username']
-        item_id = str(request.json['item_id'])
+        item_id = request.args.get('item_id')
         item_type = request.args.get('type')
-        item_name = request.json.get('name', '')  # Default name as empty string
 
-        if item_id is None or item_type is None:
+        if not item_id or not item_type:
             return jsonify({'message': 'Missing item_id or type parameter.'}), 400
 
         if item_type not in ['m', 't', 'g']:
             return jsonify({'message': 'Invalid item type.'}), 400
 
-        result = wish_list_mg.delete_one({'username': username, 'item_id': item_id, 'type': item_type})
+        item_id_int = None
+        try:
+            item_id_int = int(item_id)
+        except ValueError:
+            pass
+        item_id_str = str(item_id)
+
+        query = {
+            'username': username,
+            '$or': [
+                {'item_id': {'$in': [item_id_int, item_id_str]}, 'type': item_type},
+                {'wish_list': {'$elemMatch': {'item_id': {'$in': [item_id_int, item_id_str]}, 'type': item_type}}}
+            ]
+        }
+
+        result = wish_list_mg.delete_one(query)
+
         if result.deleted_count > 0:
             return jsonify({'message': 'Item removed successfully.'})
         else:
             return jsonify({'message': 'Item not found in wishlist.'}), 404
     else:
         return jsonify({'message': 'Invalid session ID.'}), 401
+
 
 
 @app.route('/check_wishlist', methods=['POST'])
