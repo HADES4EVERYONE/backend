@@ -193,20 +193,24 @@ def add_to_wishlist():
     session_doc = session_collection.find_one({'_id': session_id})
     if session_doc:
         username = session_doc['username']
-        item_id = request.json['item_id']
-        item_type = request.json.get('type')  # Default type can be set as 'general'
+        item_id = str(request.json.get('item_id'))
+        item_type = request.json.get('type')
+        item_name = request.json.get('name', '')  # Default name as empty string
+
+        if item_id is None or item_type is None:
+            return jsonify({'message': 'Missing item_id or type parameter.'}), 400
 
         if item_type not in ['m', 't', 'g']:
             return jsonify({'message': 'Invalid item type.'}), 400
 
         # Check if the item already exists in the wishlist to prevent duplicates
-        existing_item = wish_list_mg.find_one({'username': username, 'item_id': item_id, 'type': item_type})
+        existing_item = wish_list_mg.find_one({'username': username, 'item_id': item_id, 'type': item_type, 'name': item_name})
 
         if existing_item:
             return jsonify({'message': 'Item already exists in the wishlist.'}), 409
 
         # Add new wishlist item if it doesn't exist
-        wish_list_mg.insert_one({'username': username, 'item_id': item_id, 'type': item_type})
+        wish_list_mg.insert_one({'username': username, 'item_id': item_id, 'type': item_type, 'name': item_name})
 
         return jsonify({'message': 'wishlist updated successfully.'})
     else:
@@ -219,8 +223,12 @@ def remove_from_wishlist():
     session_doc = session_collection.find_one({'_id': session_id})
     if session_doc:
         username = session_doc['username']
-        item_id = request.args.get('item_id')
+        item_id = str(request.json['item_id'])
         item_type = request.args.get('type')
+        item_name = request.json.get('name', '')  # Default name as empty string
+
+        if item_id is None or item_type is None:
+            return jsonify({'message': 'Missing item_id or type parameter.'}), 400
 
         if item_type not in ['m', 't', 'g']:
             return jsonify({'message': 'Invalid item type.'}), 400
@@ -240,14 +248,22 @@ def check_wishlist():
     session_doc = session_collection.find_one({'_id': session_id})
     if session_doc:
         username = session_doc['username']
-        item_id = request.json['item_id']
+        item_id = str(request.json['item_id'])
         item_type = request.json.get('type')
+        item_name = request.json.get('name', '')  # Default name as empty string
+
+        if item_id is None or item_type is None:
+            return jsonify({'message': 'Missing item_id or type parameter.'}), 400
+
+        if item_name == '':
+            return jsonify({'message': 'Missing item name parameter.'}), 400
 
         if item_type not in ['m', 't', 'g']:  # Assuming 'm', 't', 'g' stand for movie, tv-show, game respectively.
             return jsonify({'message': 'Invalid item type.'}), 400
 
         # Check if the item exists in the wishlist
-        exists = wish_list_mg.find_one({'username': username, 'item_id': item_id, 'type': item_type}) is not None
+        exists = wish_list_mg.find_one({'username': username, 'item_id': item_id, 'type': item_type, 'name': item_name
+                                        }) is not None
         return jsonify({'message': 'Check completed.', 'in_wishlist': exists})
     else:
         return jsonify({'message': 'Invalid session ID.'}), 401
@@ -261,7 +277,13 @@ def get_wishlist():
         username = session_doc['username']
         # Retrieve all wishlist items for this user
         wish_list_cursor = wish_list_mg.find({'username': username})
-        all_wish_list_items = [{'item_id': item['item_id'], 'type': item.get('type', 'general')} for item in wish_list_cursor]
+        all_wish_list_items = []
+        for item in wish_list_cursor:
+            item_id = item.get('item_id', 'Unknown ID')
+            name = item.get('name', 'No Name Provided')
+            item_type = item.get('type', 'Unknown Type')
+            all_wish_list_items.append({'item_id': item_id, 'name': name, 'type': item_type})
+
         return jsonify({'message': 'Wishlist retrieved successfully.', 'data': all_wish_list_items})
     else:
         return jsonify({'message': 'Invalid session ID.'}), 401
