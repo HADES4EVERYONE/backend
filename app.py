@@ -101,7 +101,7 @@ def login():
     password = request.json['password']
 
     # Check if the username and password are correct
-    user = users_collection.find_one({"username": username, "password": password})  # Note: Passwords should be hashed
+    user = users_collection.find_one({"username": username, "password": password})
 
     if user:
         new_session_id = generate_session_id()
@@ -135,7 +135,7 @@ def logout():
         session_collection.delete_one({'_id': session_id})
         return {'message': 'Logged out successfully.'}
     else:
-        return {'message': 'Invalid session ID.'}, 401
+        return jsonify({'message': 'Invalid session ID.'}), 401
 
 
 @app.route('/get_model', methods=['GET'])
