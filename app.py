@@ -55,6 +55,7 @@ def register():
     username = request.json['username']
     password = request.json['password']
 
+
     # Check if the username already exists
     if users_collection.find_one({"username": username}):
         return jsonify({'message': 'User already exists.'}), 409  # HTTP 409 Conflict for existing resource
