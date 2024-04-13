@@ -86,7 +86,12 @@ class OnlineRecommender:
         # Normalize type weights
         total_weight = sum(type_weights.values())
         type_weights = {t: w / total_weight for t, w in type_weights.items()}
-        print(f'Type weights: {type_weights}, total weight: {total_weight}')
+        # print(f'Type weights: {type_weights}, total weight: {total_weight}')
+        #
+        # Find the top genres in the selected item type
+        selected_type_genres = [(genre_name, weight) for genre_name, (weight, genre_type) in genre_weights.items() if
+                                genre_type == item_type]
+        selected_type_genres = sorted(selected_type_genres, key=lambda x: x[1], reverse=True)[:3]
 
         # Find the top genres in other types
         top_genres = {}
@@ -98,6 +103,23 @@ class OnlineRecommender:
             top_genres[genre_type] = sorted(top_genres[genre_type], key=lambda x: x[1], reverse=True)[:3]
 
         items = []
+        for genre_name, weight in selected_type_genres:
+            genre_ids = self.get_genre_ids(genre_name, item_type)
+            for genre_id in genre_ids:
+                page = 1
+                while True:
+                    genre_items = self.get_items_by_genre(item_type, genre_id, page)
+                    if not genre_items:
+                        break
+                    if item_type == 'g':
+                        items.extend([(item['id'], weight * 1.5, item['rating']) for item in genre_items['results']])
+                    else:
+                        items.extend(
+                            [(item['id'], weight * 1.5, item['vote_average']) for item in genre_items['results']])
+                    page += 1
+                    if len(items) >= weight * 20:
+                        break
+
         for genre_type in top_genres:
             for genre_name, weight in top_genres[genre_type]:
                 genre_ids = self.get_genre_ids(genre_name, item_type)
