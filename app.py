@@ -94,7 +94,6 @@ def update_model():
         username = session[session_id]
         new_model = request.json['model']
         user_model_mg.update_one({'username': username}, {'$set': {'model': new_model}}, upsert=True)
-        conn.commit()
         return {'message': 'Model updated successfully.'}
     else:
         return {'message': 'Invalid session ID.'}
@@ -118,7 +117,6 @@ def add_to_wishlist():
         username = session[session_id]
         wish_list = request.json['wish_list']
         wish_list_mg.update_one({'username': username}, {'$set': {'wish_list': wish_list}}, upsert=True)
-        conn.commit()
         return {'message': 'wish_list updated successfully.'}
     else:
         return {'message': 'Invalid session ID.'}
