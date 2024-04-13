@@ -585,4 +585,4 @@ def get_random_item_id(item_type):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=14138, host='0.0.0.0')
