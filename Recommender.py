@@ -3,7 +3,7 @@ import pandas as pd
 from surprise import SVD, KNNBasic
 from surprise import Dataset, Reader
 from collections import defaultdict
-from db import ratings_collection, user_model_mg, genres_collection
+from db import ratings_collection, user_model_mg, genres_collection, wish_list_mg
 import requests
 from config import TMDB_API_KEY, RAWG_API_KEY, TMDB_ACCESS_TOKEN
 
@@ -48,6 +48,29 @@ class OnlineRecommender:
         else:
             return None
 
+    def get_item_average_rating(self, item_id, item_type):
+        if item_type == 'm':
+            url = f'https://api.themoviedb.org/3/movie/{item_id}?api_key={TMDB_API_KEY}'
+        elif item_type == 't':
+            url = f'https://api.themoviedb.org/3/tv/{item_id}?api_key={TMDB_API_KEY}'
+        elif item_type == 'g':
+            url = f'https://api.rawg.io/api/games/{item_id}?key={RAWG_API_KEY}'
+
+        headers = {}
+        if item_type in ['m', 't']:
+            headers['Authorization'] = f'Bearer {TMDB_ACCESS_TOKEN}'
+
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            if item_type == 'g':
+                return data.get('rating', 4.0)
+            else:
+                return data.get('vote_average', 4.0)
+        else:
+            return 4.0
+
+
     def train(self, username, item_id, rating, item_type):
         ratings = list(ratings_collection.find({'username': username, 'type': item_type}))
         reader = Reader(rating_scale=(1, 5))
@@ -77,6 +100,9 @@ class OnlineRecommender:
             genre_weights = {genre['name']: (genre['weight'], genre['type']) for genre in user_model['model']['genres']}
         else:
             genre_weights = {}
+
+        # Get the user's wishlist items
+        wishlist_items = self.get_user_wishlist(username)
 
         # Find the top genres in the selected item type (movies)
         selected_type_genres = [(genre_name, weight) for genre_name, (weight, genre_type) in genre_weights.items() if
@@ -111,8 +137,13 @@ class OnlineRecommender:
                         items.extend(
                             [(item['id'], weight * 1.5, item['vote_average']) for item in genre_items['results']])
                     page += 1
-                    if len(items) >= weight * 50:
+                    if len(items) >= weight * 100:
                         break
+
+        # Add wishlist items to the recommendation list with a higher weight
+        for item_id in wishlist_items:
+            avg_rating = self.get_item_average_rating(item_id, item_type)
+            items.append((item_id, 2.0, avg_rating))
 
         recommendations = []
         for item_id, weight, avg_rating in items:
@@ -137,3 +168,21 @@ class OnlineRecommender:
 
         # print(f"Fetched genre IDs for {genre_name} of type {genre_type}: {genre_ids}")
         return genre_ids
+
+
+    def get_user_wishlist(self, username):
+        user_wishlist_items = wish_list_mg.find({'username': username})
+        all_wish_list_items = []
+        for item in user_wishlist_items:
+            if 'wish_list' in item:
+                for nested_item in item['wish_list']:
+                    process_wishlist_item(nested_item, all_wish_list_items)
+            else:
+                process_wishlist_item(item, all_wish_list_items)
+        return [item['id'] for item in all_wish_list_items]
+
+    def process_wishlist_item(item, all_wish_list_items):
+        item_id = item.get('item_id', 'Unknown ID')
+        name = item.get('name', 'No Name Provided')
+        item_type = item.get('type', 'Unknown Type')
+        all_wish_list_items.append({'item_id': item_id, 'name': name, 'type': item_type})
