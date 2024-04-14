@@ -111,7 +111,7 @@ class OnlineRecommender:
                         items.extend(
                             [(item['id'], weight * 1.5, item['vote_average']) for item in genre_items['results']])
                     page += 1
-                    if len(items) >= weight * 20:
+                    if len(items) >= weight * 50:
                         break
 
         recommendations = []
