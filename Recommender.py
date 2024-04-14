@@ -102,7 +102,7 @@ class OnlineRecommender:
             genre_weights = {}
 
         # Get the user's wishlist items
-        wishlist_items = self.get_user_wishlist(username)
+        wishlist_items = self.get_user_wishlist(username)[item_type]
 
         # Find the top genres in the selected item type (movies)
         selected_type_genres = [(genre_name, weight) for genre_name, (weight, genre_type) in genre_weights.items() if
@@ -137,7 +137,7 @@ class OnlineRecommender:
                         items.extend(
                             [(item['id'], weight * 1.5, item['vote_average']) for item in genre_items['results']])
                     page += 1
-                    if len(items) >= weight * 100:
+                    if len(items) >= weight * 50:
                         break
 
         # Add wishlist items to the recommendation list with a higher weight
@@ -169,19 +169,24 @@ class OnlineRecommender:
         # print(f"Fetched genre IDs for {genre_name} of type {genre_type}: {genre_ids}")
         return genre_ids
 
-
     def get_user_wishlist(self, username):
         user_wishlist_items = wish_list_mg.find({'username': username})
-        all_wish_list_items = []
+        wishlist_items_by_type = {'m': [], 't': [], 'g': []}
         for item in user_wishlist_items:
             if 'wish_list' in item:
                 for nested_item in item['wish_list']:
-                    process_wishlist_item(nested_item, all_wish_list_items)
+                    item_id = nested_item.get('item_id')
+                    item_type = nested_item.get('type')
+                    if item_id and item_type in wishlist_items_by_type:
+                        wishlist_items_by_type[item_type].append(item_id)
             else:
-                process_wishlist_item(item, all_wish_list_items)
-        return [item['id'] for item in all_wish_list_items]
+                item_id = item.get('item_id')
+                item_type = item.get('type')
+                if item_id and item_type in wishlist_items_by_type:
+                    wishlist_items_by_type[item_type].append(item_id)
+        return wishlist_items_by_type
 
-    def process_wishlist_item(item, all_wish_list_items):
+    def process_wishlist_item(self, item, all_wish_list_items):
         item_id = item.get('item_id', 'Unknown ID')
         name = item.get('name', 'No Name Provided')
         item_type = item.get('type', 'Unknown Type')
