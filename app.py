@@ -62,27 +62,96 @@ conn.commit()
 #                 'data': {'session_id': new_session_id, 'realname': realname, 'username': username}}
 
 
-def getTMDBHeaders():
+def get_tmdb_headers():
     return {
         "Content-Type": "application/json",
         "Authorization": creds["TMDB"]["access_token"],
     }
 
 
+def get_rawg_params():
+    return {"key": creds["RAWG"]["key"]}
+
+
 @app.route("/movie/genres", methods=["GET"])
-def getMovieGenres():
+def get_movie_genres():
     api_url = f"{endpoints['tmdb']}genre/movie/list?language=en"
-    headers = getTMDBHeaders()
+    headers = get_tmdb_headers()
     response = requests.get(api_url, headers=headers)
     return response.json()
 
 
 @app.route("/movie/details", methods=["GET"])
-def getMovieDetails():
+def get_movie_details():
     item_id = request.args.get("item_id")
-    headers = getTMDBHeaders()
+    headers = get_tmdb_headers()
     api_url = f"{endpoints['tmdb']}movie/{item_id}"
     response = requests.get(api_url, headers=headers)
+    return response.json()
+
+
+@app.route("/tv/genres", methods=["GET"])
+def get_tv_genres():
+    api_url = f"{endpoints['tmdb']}genre/tv/list?language=en"
+    headers = get_tmdb_headers()
+    response = requests.get(api_url, headers=headers)
+    return response.json()
+
+
+@app.route("/tv/details", methods=["GET"])
+def get_tv_details():
+    item_id = request.args.get("item_id")
+    api_url = f"{endpoints['tmdb']}tv/{item_id}"
+    headers = get_tmdb_headers()
+    response = requests.get(api_url, headers=headers)
+    return response.json()
+
+
+@app.route("/game/details", methods=["GET"])
+def get_game_details():
+    item_id = request.args.get("item_id")
+    api_url = f"{endpoints['rawg']}games/{item_id}"
+    response = requests.get(api_url, params=get_rawg_params())
+    return response.json()
+
+
+@app.route("/game/genres", methods=["GET"])
+def get_game_genres():
+    api_url = f"{endpoints['rawg']}genres"
+    response = requests.get(api_url, params=get_rawg_params())
+    return response.json()
+
+
+@app.route("/movie/popular", methods=["GET"])
+def get_popular_movies():
+    api_url = f"{endpoints['tmdb']}movie/popular"
+    response = requests.get(api_url, headers=get_tmdb_headers())
+    return response.json()
+
+
+@app.route("/tv/popular", methods=["GET"])
+def get_popular_tv():
+    api_url = f"{endpoints['tmdb']}tv/popular"
+    response = requests.get(api_url, headers=get_tmdb_headers())
+    return response.json()
+
+
+@app.route("/game/popular", methods=["GET"])
+def get_popular_games():
+    api_url = f"{endpoints['rawg']}games"
+    response = requests.get(
+        api_url, params={**get_rawg_params(), "metacritic": "80,100"}
+    )
+    return response.json()
+
+
+@app.route("/movie/genre-id", methods=["GET"])
+def get_movies_genre_id():
+    genre_id = request.args.get("genre_id")
+    api_url = f"{endpoints['tmdb']}discover/movie"
+    response = requests.get(
+        api_url, headers=get_tmdb_headers(), params={"with_genres": genre_id}
+    )
     return response.json()
 
 
