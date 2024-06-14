@@ -62,7 +62,7 @@ conn.commit()
 #                 'data': {'session_id': new_session_id, 'realname': realname, 'username': username}}
 
 
-def getHeaders():
+def getTMDBHeaders():
     return {
         "Content-Type": "application/json",
         "Authorization": creds["TMDB"]["access_token"],
@@ -72,7 +72,16 @@ def getHeaders():
 @app.route("/movie/genres", methods=["GET"])
 def getMovieGenres():
     api_url = f"{endpoints['tmdb']}genre/movie/list?language=en"
-    headers = getHeaders()
+    headers = getTMDBHeaders()
+    response = requests.get(api_url, headers=headers)
+    return response.json()
+
+
+@app.route("/movie/details", methods=["GET"])
+def getMovieDetails():
+    item_id = request.args.get("item_id")
+    headers = getTMDBHeaders()
+    api_url = f"{endpoints['tmdb']}movie/{item_id}"
     response = requests.get(api_url, headers=headers)
     return response.json()
 
