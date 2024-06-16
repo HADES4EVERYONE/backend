@@ -3,7 +3,7 @@ import pandas as pd
 from surprise import SVD, KNNBasic
 from surprise import Dataset, Reader
 from collections import defaultdict
-from db import ratings_collection, user_model_mg, genres_collection
+from db import ratings_collection, user_model_mg, genres_collection, wish_list_mg
 import requests
 from config import TMDB_API_KEY, RAWG_API_KEY, TMDB_ACCESS_TOKEN
 
@@ -48,6 +48,29 @@ class OnlineRecommender:
         else:
             return None
 
+    def get_item_average_rating(self, item_id, item_type):
+        if item_type == 'm':
+            url = f'https://api.themoviedb.org/3/movie/{item_id}?api_key={TMDB_API_KEY}'
+        elif item_type == 't':
+            url = f'https://api.themoviedb.org/3/tv/{item_id}?api_key={TMDB_API_KEY}'
+        elif item_type == 'g':
+            url = f'https://api.rawg.io/api/games/{item_id}?key={RAWG_API_KEY}'
+
+        headers = {}
+        if item_type in ['m', 't']:
+            headers['Authorization'] = f'Bearer {TMDB_ACCESS_TOKEN}'
+
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            if item_type == 'g':
+                return data.get('rating', 4.0)
+            else:
+                return data.get('vote_average', 4.0)
+        else:
+            return 4.0
+
+
     def train(self, username, item_id, rating, item_type):
         ratings = list(ratings_collection.find({'username': username, 'type': item_type}))
         reader = Reader(rating_scale=(1, 5))
@@ -78,45 +101,49 @@ class OnlineRecommender:
         else:
             genre_weights = {}
 
-        # Calculate type weights
-        type_weights = {}
-        for genre_name, (weight, genre_type) in genre_weights.items():
-            type_weights[genre_type] = type_weights.get(genre_type, 0) + weight
+        # Get the user's wishlist items
+        wishlist_items = self.get_user_wishlist(username)[item_type]
 
-        # Normalize type weights
-        total_weight = sum(type_weights.values())
-        type_weights = {t: w / total_weight for t, w in type_weights.items()}
-        print(f'Type weights: {type_weights}, total weight: {total_weight}')
+        # Find the top genres in the selected item type (movies)
+        selected_type_genres = [(genre_name, weight) for genre_name, (weight, genre_type) in genre_weights.items() if
+                                genre_type == item_type]
+        selected_type_genres = sorted(selected_type_genres, key=lambda x: x[1], reverse=True)[:3]
 
-        # Find the top genres in other types
-        top_genres = {}
+        # Find similar genres in other item types and adjust weights
         for genre_name, (weight, genre_type) in genre_weights.items():
             if genre_type != item_type:
-                top_genres[genre_type] = top_genres.get(genre_type, []) + [(genre_name, weight)]
-
-        for genre_type in top_genres:
-            top_genres[genre_type] = sorted(top_genres[genre_type], key=lambda x: x[1], reverse=True)[:3]
+                # Split the genre name into individual words
+                genre_words = re.findall(r'\w+', genre_name)
+                for word in genre_words:
+                    similar_genre_ids = self.get_genre_ids(word, item_type)
+                    if similar_genre_ids:
+                        for i, (selected_genre_name, selected_genre_weight) in enumerate(selected_type_genres):
+                            if selected_genre_name in similar_genre_ids:
+                                selected_type_genres[i] = (selected_genre_name, selected_genre_weight + weight)
+                                break
 
         items = []
-        for genre_type in top_genres:
-            for genre_name, weight in top_genres[genre_type]:
-                genre_ids = self.get_genre_ids(genre_name, item_type)
-                for genre_id in genre_ids:
-                    page = 1
-                    while True:
-                        genre_items = self.get_items_by_genre(item_type, genre_id, page)
-                        if not genre_items:
-                            break
-                        if item_type == 'g':
-                            items.extend([(item['id'], weight * type_weights[genre_type], item['rating']) for item in
-                                          genre_items['results']])
-                        else:
-                            items.extend(
-                                [(item['id'], weight * type_weights[genre_type], item['vote_average']) for item in
-                                 genre_items['results']])
-                        page += 1
-                        if len(items) >= weight * 20:
-                            break
+        for genre_name, weight in selected_type_genres:
+            genre_ids = self.get_genre_ids(genre_name, item_type)
+            for genre_id in genre_ids:
+                page = 1
+                while True:
+                    genre_items = self.get_items_by_genre(item_type, genre_id, page)
+                    if not genre_items:
+                        break
+                    if item_type == 'g':
+                        items.extend([(item['id'], weight * 1.5, item['rating']) for item in genre_items['results']])
+                    else:
+                        items.extend(
+                            [(item['id'], weight * 1.5, item['vote_average']) for item in genre_items['results']])
+                    page += 1
+                    if len(items) >= weight * 50:
+                        break
+
+        # Add wishlist items to the recommendation list with a higher weight
+        for item_id in wishlist_items:
+            avg_rating = self.get_item_average_rating(item_id, item_type)
+            items.append((item_id, 2.0, avg_rating))
 
         recommendations = []
         for item_id, weight, avg_rating in items:
@@ -127,6 +154,7 @@ class OnlineRecommender:
 
         self.reset_training_flags(item_type)
         return sorted(recommendations, key=lambda x: x[1], reverse=True)[:n]
+
 
     def get_genre_ids(self, genre_name, genre_type):
         regex_pattern = re.compile('.*' + re.escape(genre_name) + '.*', re.IGNORECASE)
@@ -140,3 +168,26 @@ class OnlineRecommender:
 
         # print(f"Fetched genre IDs for {genre_name} of type {genre_type}: {genre_ids}")
         return genre_ids
+
+    def get_user_wishlist(self, username):
+        user_wishlist_items = wish_list_mg.find({'username': username})
+        wishlist_items_by_type = {'m': [], 't': [], 'g': []}
+        for item in user_wishlist_items:
+            if 'wish_list' in item:
+                for nested_item in item['wish_list']:
+                    item_id = nested_item.get('item_id')
+                    item_type = nested_item.get('type')
+                    if item_id and item_type in wishlist_items_by_type:
+                        wishlist_items_by_type[item_type].append(item_id)
+            else:
+                item_id = item.get('item_id')
+                item_type = item.get('type')
+                if item_id and item_type in wishlist_items_by_type:
+                    wishlist_items_by_type[item_type].append(item_id)
+        return wishlist_items_by_type
+
+    def process_wishlist_item(self, item, all_wish_list_items):
+        item_id = item.get('item_id', 'Unknown ID')
+        name = item.get('name', 'No Name Provided')
+        item_type = item.get('type', 'Unknown Type')
+        all_wish_list_items.append({'item_id': item_id, 'name': name, 'type': item_type})
