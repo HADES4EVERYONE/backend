@@ -155,7 +155,7 @@ def get_movies_genre_id():
     return response.json()
 
 
-@app.route("tv/genre-id", methods=["GET"])
+@app.route("/tv/genre-id", methods=["GET"])
 def get_tv_genre_id():
     genre_id = request.args.get("genre_id")
     api_url = f"{endpoints['tmdb']}discover/tv"
@@ -165,7 +165,7 @@ def get_tv_genre_id():
     return response.json()
 
 
-@app.route("game/genre-id", methods=["GET"])
+@app.route("/game/genre-id", methods=["GET"])
 def get_game_genre_id():
     genre_id = request.args.get("genre_id")
     api_url = f"{endpoints['rawg']}games"
@@ -173,7 +173,7 @@ def get_game_genre_id():
     return response.json()
 
 
-@app.route("movie/search", methods=["GET"])
+@app.route("/movie/search", methods=["GET"])
 def movie_search():
     query = request.args.get("query")
     api_url = f"{endpoints['tmdb']}search/movie"
@@ -182,7 +182,7 @@ def movie_search():
     return response.json()
 
 
-@app.route("tv/search", methods=["GET"])
+@app.route("/tv/search", methods=["GET"])
 def tv_search():
     query = request.args.get("query")
     api_url = f"{endpoints['tmdb']}search/tv"
@@ -191,7 +191,7 @@ def tv_search():
     return response.json()
 
 
-@app.route("game/search", methods=["GET"])
+@app.route("/game/search", methods=["GET"])
 def game_search():
     query = request.args.get("query")
     api_url = f"{endpoints['rawg']}games"
