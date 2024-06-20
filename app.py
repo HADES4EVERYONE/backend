@@ -200,6 +200,22 @@ def game_search():
     return response.json()
 
 
+@app.route("/movie/similar", methods=["GET"])
+def get_similar_movies():
+    item_id = request.args.get("item_id")
+    api_url = f"{endpoints['tmdb']}movie/{item_id}/similar"
+    response = requests.get(api_url, headers=get_tmdb_headers())
+    return response.json()
+
+
+@app.route("/tv/similar", methods=["GET"])
+def get_similar_tv():
+    item_id = request.args.get("item_id")
+    api_url = f"{endpoints['tmdb']}tv/{item_id}/similar"
+    response = requests.get(api_url, headers=get_tmdb_headers())
+    return response.json()
+
+
 @app.route("/register", methods=["POST"])
 def register():
     realname = request.json["realname"]
